@@ -103,20 +103,29 @@ with chat_container:
         st.markdown(f"**{sender}:** {msg}")
 
 # --- USER INPUT ---
+# Read the value into a local variable first
 user_msg = st.text_input("Type your message...", key="user_input")
 
-if st.button("Send") and st.session_state.user_input.strip():
-    msg = st.session_state.user_input.strip()
+if st.button("Send") and user_msg.strip():
+    # Save the message locally
+    msg = user_msg.strip()
+    
+    # Append user's message
     st.session_state.chat_history.append(("You", msg))
 
+    # Generate bot reply
     if st.session_state.active_image is not None:
         img_obj = st.session_state.images[st.session_state.active_image]
         bot_reply = safe_generate_content(msg, {"mime_type": "image/jpeg", "data": img_obj["data"]})
     else:
         bot_reply = safe_generate_content(msg)
 
+    # Append bot reply
     st.session_state.chat_history.append(("Bot", bot_reply))
 
-    # Clear input safely for Streamlit Cloud
-    st.session_state.update({"user_input": ""})
+    # Clear the text input safely
+    st.session_state.user_input = ""
+
+    # Rerun to refresh UI
     st.experimental_rerun()
+
