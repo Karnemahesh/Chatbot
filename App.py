@@ -1,86 +1,122 @@
-# App.py
-
-import os
 import streamlit as st
-from dotenv import load_dotenv
-from openai import OpenAI
+import google.generativeai as genai
+from google.api_core.exceptions import ResourceExhausted
+import io
 
-# --------------------------
-# Load environment variables
-# --------------------------
-load_dotenv()
+# --- CONFIG ---
+st.set_page_config(page_title="Multi-Image Chat with Gemini", layout="wide")
 
-def get_api_key():
-    """
-    Retrieve the Google API key.
-    Priority: Streamlit Secrets -> Local .env -> OS Environment
-    """
-    api_key = None
-
-    # Try Streamlit Cloud Secrets
-    if "GOOGLE_API_KEY" in st.secrets:
-        api_key = st.secrets["GOOGLE_API_KEY"]
-
-    # Fallback to .env / system
-    if not api_key:
-        api_key = os.getenv("GOOGLE_API_KEY")
-
-    return api_key
-
-
-# --------------------------
-# Initialize API Key
-# --------------------------
-GOOGLE_API_KEY = get_api_key()
-
-if not GOOGLE_API_KEY:
-    st.error("🚨 GOOGLE_API_KEY is missing! Please set it in Streamlit Secrets (on Cloud) or in a local .env file.")
+# --- READ API KEY FROM STREAMLIT SECRETS ---
+try:
+    api_key = st.secrets["general"]["GOOGLE_API_KEY"]
+except KeyError:
+    st.error("❌ GOOGLE_API_KEY not set in Streamlit Secrets.")
     st.stop()
 
-# Initialize OpenAI Client with Google API key
-client = OpenAI(api_key=GOOGLE_API_KEY)
+genai.configure(api_key=api_key)
 
+# --- INIT SESSION STATE ---
+if "images" not in st.session_state:
+    st.session_state.images = []
+if "active_image" not in st.session_state:
+    st.session_state.active_image = None
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+if "user_input" not in st.session_state:
+    st.session_state.user_input = ""
 
-# --------------------------
-# Streamlit App UI
-# --------------------------
-st.set_page_config(page_title="Image Segmentation + Chatbot", layout="wide")
-
-st.title("🖼️ Image Segmentation + 💬 Chatbot")
-
-# Conversation state
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-# Image upload
-uploaded_image = st.file_uploader("Upload an image", type=["png", "jpg", "jpeg"])
-
-if uploaded_image:
-    st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
-
-# Chat input
-user_input = st.chat_input("Type your message...")
-
-if user_input:
-    # Save user input
-    st.session_state.messages.append({"role": "user", "content": user_input})
-
-    # Call API (replace with your actual Google Gemini / OpenAI request)
+# --- SAFE GEMINI CALL ---
+def safe_generate_content(prompt, image_data=None):
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",  # 👈 swap for Gemini model if using Google
-            messages=st.session_state.messages
-        )
-        bot_reply = response.choices[0].message.content
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        if image_data:
+            return model.generate_content([prompt, image_data]).text
+        else:
+            return model.generate_content(prompt).text
+    except ResourceExhausted:
+        st.warning("⚠️ Gemini API quota exceeded — running in offline mode.")
+        return f"[Offline Mode] (Simulated answer) {prompt[:100]}..."
 
-    except Exception as e:
-        bot_reply = f"⚠️ API Error: {str(e)}"
+# --- IMAGE ANALYSIS ---
+def analyze_image(image_bytes, name):
+    image_data = {"mime_type": "image/jpeg", "data": image_bytes}
+    return {
+        "DESCRIPTION": safe_generate_content(
+            "Describe this image in detail, include context and objects you see.", image_data
+        ),
+        "CAPTION": safe_generate_content(
+            "Write a short catchy caption for this image.", image_data
+        ),
+        "TAGS": safe_generate_content(
+            "Generate a list of 5 short tags for this image.", image_data
+        ),
+        "STORY": safe_generate_content(
+            "Write a short 3-sentence fictional story inspired by this image.", image_data
+        ),
+    }
 
-    # Save bot reply
-    st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+# --- SIDEBAR: UPLOAD & IMAGE LIST ---
+with st.sidebar:
+    st.header("📂 Upload Images")
+    uploaded_files = st.file_uploader(
+        "Upload images", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True
+    )
+    if uploaded_files:
+        for file in uploaded_files:
+            img_bytes = file.read()
+            analysis = analyze_image(img_bytes, file.name)
+            st.session_state.images.append({
+                "name": file.name,
+                "data": img_bytes,
+                "analysis": analysis
+            })
+            st.session_state.active_image = len(st.session_state.images) - 1  # select latest
 
-# Render conversation
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+    st.markdown("### 🖼 Images")
+    if st.session_state.images:
+        for idx, img in enumerate(st.session_state.images):
+            if st.button(img["name"], key=f"img-{idx}"):
+                st.session_state.active_image = idx
 
+# --- MAIN UI ---
+st.title("💬 Multi-Image Conversational Chatbot with Gemini")
+
+if st.session_state.active_image is not None:
+    img_obj = st.session_state.images[st.session_state.active_image]
+    col1, col2 = st.columns([1, 2])
+
+    with col1:
+        st.image(io.BytesIO(img_obj["data"]), caption=img_obj["name"], width=300)
+
+    with col2:
+        st.subheader("Image Analysis")
+        st.markdown(f"**Description:** {img_obj['analysis']['DESCRIPTION']}")
+        st.markdown(f"**Caption:** {img_obj['analysis']['CAPTION']}")
+        st.markdown(f"**Tags:** {img_obj['analysis']['TAGS']}")
+        st.markdown(f"**Story:** {img_obj['analysis']['STORY']}")
+
+# --- CHAT ---
+st.subheader("💬 Conversation")
+chat_container = st.container()
+with chat_container:
+    for sender, msg in st.session_state.chat_history:
+        st.markdown(f"**{sender}:** {msg}")
+
+# --- USER INPUT ---
+user_msg = st.text_input("Type your message...", key="user_input")
+
+if st.button("Send") and st.session_state.user_input.strip():
+    msg = st.session_state.user_input.strip()
+    st.session_state.chat_history.append(("You", msg))
+
+    if st.session_state.active_image is not None:
+        img_obj = st.session_state.images[st.session_state.active_image]
+        bot_reply = safe_generate_content(msg, {"mime_type": "image/jpeg", "data": img_obj["data"]})
+    else:
+        bot_reply = safe_generate_content(msg)
+
+    st.session_state.chat_history.append(("Bot", bot_reply))
+
+    # Clear input safely for Streamlit Cloud
+    st.session_state.update({"user_input": ""})
+    st.experimental_rerun()
