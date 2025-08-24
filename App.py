@@ -117,6 +117,6 @@ if st.button("Send") and st.session_state.user_input.strip():
 
     st.session_state.chat_history.append(("Bot", bot_reply))
 
-    # Clear input after sending
-    st.session_state.user_input = ""
+    # Clear input safely for Streamlit Cloud
+    st.session_state.update({"user_input": ""})
     st.experimental_rerun()
