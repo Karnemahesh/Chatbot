@@ -1,17 +1,18 @@
 import streamlit as st
 import google.generativeai as genai
 from google.api_core.exceptions import ResourceExhausted
-import os, io
-from PIL import Image
+import io
 
 # --- CONFIG ---
 st.set_page_config(page_title="Multi-Image Chat with Gemini", layout="wide")
 
-# Read API key from environment variable
-api_key = os.getenv("GOOGLE_API_KEY")
-if not api_key:
-    st.error("❌ GOOGLE_API_KEY environment variable not set.")
+# --- READ API KEY FROM STREAMLIT SECRETS ---
+try:
+    api_key = st.secrets["general"]["GOOGLE_API_KEY"]
+except KeyError:
+    st.error("❌ GOOGLE_API_KEY not set in Streamlit Secrets.")
     st.stop()
+
 genai.configure(api_key=api_key)
 
 # --- INIT SESSION STATE ---
@@ -22,17 +23,14 @@ if "active_image" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# --- SAFE GEMINI CALL WITH OFFLINE MODE ---
+# --- SAFE GEMINI CALL ---
 def safe_generate_content(prompt, image_data=None):
     try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
         if image_data:
-            return genai.GenerativeModel("gemini-1.5-flash").generate_content(
-                [prompt, image_data]
-            ).text
+            return model.generate_content([prompt, image_data]).text
         else:
-            return genai.GenerativeModel("gemini-1.5-flash").generate_content(
-                prompt
-            ).text
+            return model.generate_content(prompt).text
     except ResourceExhausted:
         st.warning("⚠️ Gemini API quota exceeded — running in offline mode.")
         return f"[Offline Mode] (Simulated answer) {prompt[:100]}..."
@@ -43,24 +41,19 @@ def analyze_image(image_bytes, name):
         "mime_type": "image/jpeg",
         "data": image_bytes
     }
-    description = safe_generate_content(
-        "Describe this image in detail, include context and objects you see.", image_data
-    )
-    caption = safe_generate_content(
-        "Write a short catchy caption for this image.", image_data
-    )
-    tags = safe_generate_content(
-        "Generate a list of 5 short tags for this image.", image_data
-    )
-    story = safe_generate_content(
-        "Write a short 3-sentence fictional story inspired by this image.", image_data
-    )
-
     return {
-        "DESCRIPTION": description,
-        "CAPTION": caption,
-        "TAGS": tags,
-        "STORY": story
+        "DESCRIPTION": safe_generate_content(
+            "Describe this image in detail, include context and objects you see.", image_data
+        ),
+        "CAPTION": safe_generate_content(
+            "Write a short catchy caption for this image.", image_data
+        ),
+        "TAGS": safe_generate_content(
+            "Generate a list of 5 short tags for this image.", image_data
+        ),
+        "STORY": safe_generate_content(
+            "Write a short 3-sentence fictional story inspired by this image.", image_data
+        )
     }
 
 # --- SIDEBAR: UPLOAD & IMAGE LIST ---
@@ -82,10 +75,9 @@ with st.sidebar:
 
     st.markdown("### 🖼 Images")
     if st.session_state.images:
-        with st.container():
-            for idx, img in enumerate(st.session_state.images):
-                if st.button(img["name"], key=f"img-{idx}"):
-                    st.session_state.active_image = idx
+        for idx, img in enumerate(st.session_state.images):
+            if st.button(img["name"], key=f"img-{idx}"):
+                st.session_state.active_image = idx
 
 # --- MAIN UI ---
 st.title("💬 Multi-Image Conversational Chatbot with Gemini")
@@ -122,4 +114,4 @@ if st.button("Send") and user_msg:
         bot_reply = safe_generate_content(user_msg)
 
     st.session_state.chat_history.append(("Bot", bot_reply))
-    st.rerun()  # ✅ Updated for Streamlit 1.32+
+    st.experimental_rerun()  # Updated for latest Streamlit versions
