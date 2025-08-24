@@ -22,6 +22,8 @@ if "active_image" not in st.session_state:
     st.session_state.active_image = None
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+if "user_input" not in st.session_state:
+    st.session_state.user_input = ""
 
 # --- SAFE GEMINI CALL ---
 def safe_generate_content(prompt, image_data=None):
@@ -37,10 +39,7 @@ def safe_generate_content(prompt, image_data=None):
 
 # --- IMAGE ANALYSIS ---
 def analyze_image(image_bytes, name):
-    image_data = {
-        "mime_type": "image/jpeg",
-        "data": image_bytes
-    }
+    image_data = {"mime_type": "image/jpeg", "data": image_bytes}
     return {
         "DESCRIPTION": safe_generate_content(
             "Describe this image in detail, include context and objects you see.", image_data
@@ -53,7 +52,7 @@ def analyze_image(image_bytes, name):
         ),
         "STORY": safe_generate_content(
             "Write a short 3-sentence fictional story inspired by this image.", image_data
-        )
+        ),
     }
 
 # --- SIDEBAR: UPLOAD & IMAGE LIST ---
@@ -84,10 +83,11 @@ st.title("💬 Multi-Image Conversational Chatbot with Gemini")
 
 if st.session_state.active_image is not None:
     img_obj = st.session_state.images[st.session_state.active_image]
-
     col1, col2 = st.columns([1, 2])
+
     with col1:
         st.image(io.BytesIO(img_obj["data"]), caption=img_obj["name"], width=300)
+
     with col2:
         st.subheader("Image Analysis")
         st.markdown(f"**Description:** {img_obj['analysis']['DESCRIPTION']}")
@@ -97,21 +97,26 @@ if st.session_state.active_image is not None:
 
 # --- CHAT ---
 st.subheader("💬 Conversation")
-for sender, msg in st.session_state.chat_history:
-    st.markdown(f"**{sender}:** {msg}")
+chat_container = st.container()
+with chat_container:
+    for sender, msg in st.session_state.chat_history:
+        st.markdown(f"**{sender}:** {msg}")
 
-user_msg = st.text_input("Type your message...")
-if st.button("Send") and user_msg:
-    st.session_state.chat_history.append(("You", user_msg))
+# --- USER INPUT ---
+user_msg = st.text_input("Type your message...", key="user_input")
+
+if st.button("Send") and st.session_state.user_input.strip():
+    msg = st.session_state.user_input.strip()
+    st.session_state.chat_history.append(("You", msg))
 
     if st.session_state.active_image is not None:
         img_obj = st.session_state.images[st.session_state.active_image]
-        bot_reply = safe_generate_content(user_msg, {
-            "mime_type": "image/jpeg",
-            "data": img_obj["data"]
-        })
+        bot_reply = safe_generate_content(msg, {"mime_type": "image/jpeg", "data": img_obj["data"]})
     else:
-        bot_reply = safe_generate_content(user_msg)
+        bot_reply = safe_generate_content(msg)
 
     st.session_state.chat_history.append(("Bot", bot_reply))
-    st.experimental_rerun()  # Updated for latest Streamlit versions
+
+    # Clear input after sending
+    st.session_state.user_input = ""
+    st.experimental_rerun()
