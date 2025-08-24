@@ -25,9 +25,9 @@ Explore the app live here:
 ## Project Structure
 ```plaintext
  Image-Segmentation-analysis-chatbot/
- ├── App.py/
- ├── Notebooks
- ├── requirements.txt/
+ ├── App.py
+ ├── Notebooks/
+ ├── requirements.txt
  └── README.md
 
 App.py: Main Streamlit application script.
