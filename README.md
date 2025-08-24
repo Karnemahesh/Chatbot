@@ -20,15 +20,15 @@ Explore the app live here:
    ```bash
    git clone https://github.com/Karnemahesh/Image-Segmentation-analysis-chatbot.git
    cd Image-Segmentation-analysis-chatbot
-pip install -r requirements.txt
+## pip install -r requirements.txt
 
 ## Project Structure
 
 ## Image-Segmentation-analysis-chatbot/
-## ├── App.py
-## ├── Notebooks/
-## ├── requirements.txt
-## └── README.md
+** ├── App.py
+** ├── Notebooks/
+** ├── requirements.txt
+** └── README.md
 
 App.py: Main Streamlit application script.
 Notebooks/: Jupyter notebooks for exploration, experiments, and analysis.
