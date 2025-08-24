@@ -23,12 +23,12 @@ Explore the app live here:
 ## pip install -r requirements.txt
 
 ## Project Structure
-
-## Image-Segmentation-analysis-chatbot/
-** ├── App.py//
-** ├── Notebooks//
-** ├── requirements.txt//
-** └── README.md
+```plaintext
+ Image-Segmentation-analysis-chatbot/
+ ├── App.py/
+ ├── Notebooks
+ ├── requirements.txt/
+ └── README.md
 
 App.py: Main Streamlit application script.
 Notebooks/: Jupyter notebooks for exploration, experiments, and analysis.
